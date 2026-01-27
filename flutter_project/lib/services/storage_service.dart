@@ -1,43 +1,57 @@
-import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/expense.dart';
 import '../models/recurring_expense.dart';
 import '../models/budget.dart';
 import '../models/user.dart';
 import '../models/shared_expense.dart';
 
-/// Service for persisting data locally using Hive
+/// Service for persisting data locally using SharedPreferences
 class StorageService {
-  static const String _expensesBox = 'expenses';
-  static const String _recurringExpensesBox = 'recurring_expenses';
-  static const String _budgetsBox = 'budgets';
-  static const String _usersBox = 'users';
-  static const String _sharedExpensesBox = 'shared_expenses';
+  static const String _expensesKey = 'trackwise_expenses_v1';
+  static const String _recurringExpensesKey = 'trackwise_recurring_v1';
+  static const String _budgetsKey = 'trackwise_budgets_v1';
+  static const String _usersKey = 'trackwise_users_v1';
+  static const String _sharedExpensesKey = 'trackwise_shared_v1';
 
-  /// Initialize Hive
   static Future<void> init() async {
-    await Hive.initFlutter('trackwise_db');
+    print('✅ SharedPreferences initialized');
+    await _logStorageStatus();
+  }
+
+  static Future<void> _logStorageStatus() async {
+    final prefs = await SharedPreferences.getInstance();
     
-    // Open boxes
-    await Hive.openBox<Map>(_expensesBox);
-    await Hive.openBox<Map>(_recurringExpensesBox);
-    await Hive.openBox<Map>(_budgetsBox);
-    await Hive.openBox<Map>(_usersBox);
-    await Hive.openBox<Map>(_sharedExpensesBox);
-    
-    print('✅ Hive initialized successfully');
+    print('📊 STORAGE STATUS:');
+    print('  🔑 All keys: ${prefs.getKeys()}');
+    print('  📦 Expenses: ${prefs.getString(_expensesKey)?.length ?? 0} chars');
+    print('  📦 Recurring: ${prefs.getString(_recurringExpensesKey)?.length ?? 0} chars');
+    print('  📦 Budgets: ${prefs.getString(_budgetsKey)?.length ?? 0} chars');
+    print('  📦 Users: ${prefs.getString(_usersKey)?.length ?? 0} chars');
+    print('  📦 Shared: ${prefs.getString(_sharedExpensesKey)?.length ?? 0} chars');
   }
 
   // EXPENSES
   static Future<void> saveExpenses(List<Expense> expenses) async {
     try {
-      final box = Hive.box<Map>(_expensesBox);
-      await box.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = expenses.map((e) => e.toJson()).toList();
+      final jsonString = jsonEncode(jsonList);
       
-      for (var i = 0; i < expenses.length; i++) {
-        await box.put(i, expenses[i].toJson());
-      }
+      print('🔄 Attempting to save ${expenses.length} expenses...');
+      print('🔄 JSON length: ${jsonString.length} chars');
       
-      print('💾 SAVED ${expenses.length} expenses to Hive');
+      final success = await prefs.setString(_expensesKey, jsonString);
+      
+      print('💾 Save result: $success');
+      
+      // Verify immediately
+      final verify = prefs.getString(_expensesKey);
+      print('✅ Verification: ${verify != null ? "SUCCESS - ${verify.length} chars" : "FAILED - null"}');
+      
+      // Log all keys after save
+      print('🔑 All keys after save: ${prefs.getKeys()}');
+      
     } catch (e) {
       print('❌ ERROR saving expenses: $e');
     }
@@ -45,18 +59,24 @@ class StorageService {
 
   static Future<List<Expense>> loadExpenses() async {
     try {
-      print('📂 LOADING expenses from Hive');
-      final box = Hive.box<Map>(_expensesBox);
+      final prefs = await SharedPreferences.getInstance();
       
-      final expenses = <Expense>[];
-      for (var i = 0; i < box.length; i++) {
-        final data = box.get(i);
-        if (data != null) {
-          expenses.add(Expense.fromJson(Map<String, dynamic>.from(data)));
-        }
+      print('🔍 Loading expenses...');
+      print('🔑 Available keys: ${prefs.getKeys()}');
+      
+      final jsonString = prefs.getString(_expensesKey);
+      
+      print('📥 Raw data: ${jsonString?.substring(0, jsonString.length > 100 ? 100 : jsonString.length) ?? "null"}');
+      
+      if (jsonString == null || jsonString.isEmpty) {
+        print('📂 No expenses found in storage');
+        return [];
       }
       
-      print('✅ Loaded ${expenses.length} expenses from Hive');
+      final jsonList = jsonDecode(jsonString) as List;
+      final expenses = jsonList.map((json) => Expense.fromJson(json)).toList();
+      
+      print('✅ Loaded ${expenses.length} expenses');
       return expenses;
     } catch (e) {
       print('❌ ERROR loading expenses: $e');
@@ -67,14 +87,12 @@ class StorageService {
   // RECURRING EXPENSES
   static Future<void> saveRecurringExpenses(List<RecurringExpense> expenses) async {
     try {
-      final box = Hive.box<Map>(_recurringExpensesBox);
-      await box.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = expenses.map((e) => e.toJson()).toList();
+      final jsonString = jsonEncode(jsonList);
       
-      for (var i = 0; i < expenses.length; i++) {
-        await box.put(i, expenses[i].toJson());
-      }
-      
-      print('💾 Saved ${expenses.length} recurring expenses to Hive');
+      await prefs.setString(_recurringExpensesKey, jsonString);
+      print('💾 Saved ${expenses.length} recurring expenses');
     } catch (e) {
       print('❌ ERROR saving recurring expenses: $e');
     }
@@ -82,17 +100,18 @@ class StorageService {
 
   static Future<List<RecurringExpense>> loadRecurringExpenses() async {
     try {
-      final box = Hive.box<Map>(_recurringExpensesBox);
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_recurringExpensesKey);
       
-      final expenses = <RecurringExpense>[];
-      for (var i = 0; i < box.length; i++) {
-        final data = box.get(i);
-        if (data != null) {
-          expenses.add(RecurringExpense.fromJson(Map<String, dynamic>.from(data)));
-        }
+      if (jsonString == null || jsonString.isEmpty) {
+        print('📂 No recurring expenses found');
+        return [];
       }
       
-      print('✅ Loaded ${expenses.length} recurring expenses from Hive');
+      final jsonList = jsonDecode(jsonString) as List;
+      final expenses = jsonList.map((json) => RecurringExpense.fromJson(json)).toList();
+      
+      print('✅ Loaded ${expenses.length} recurring expenses');
       return expenses;
     } catch (e) {
       print('❌ ERROR loading recurring expenses: $e');
@@ -103,18 +122,16 @@ class StorageService {
   // BUDGETS
   static Future<void> saveBudgets(List<Budget> budgets) async {
     try {
-      final box = Hive.box<Map>(_budgetsBox);
-      await box.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = budgets.map((b) => {
+        'category': b.category,
+        'amount': b.amount,
+        'period': b.period,
+      }).toList();
+      final jsonString = jsonEncode(jsonList);
       
-      for (var i = 0; i < budgets.length; i++) {
-        await box.put(i, {
-          'category': budgets[i].category,
-          'amount': budgets[i].amount,
-          'period': budgets[i].period,
-        });
-      }
-      
-      print('💾 Saved ${budgets.length} budgets to Hive');
+      await prefs.setString(_budgetsKey, jsonString);
+      print('💾 Saved ${budgets.length} budgets');
     } catch (e) {
       print('❌ ERROR saving budgets: $e');
     }
@@ -122,21 +139,22 @@ class StorageService {
 
   static Future<List<Budget>> loadBudgets() async {
     try {
-      final box = Hive.box<Map>(_budgetsBox);
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_budgetsKey);
       
-      final budgets = <Budget>[];
-      for (var i = 0; i < box.length; i++) {
-        final data = box.get(i);
-        if (data != null) {
-          budgets.add(Budget(
-            category: data['category'] as String,
-            amount: (data['amount'] as num).toDouble(),
-            period: data['period'] as String,
-          ));
-        }
+      if (jsonString == null || jsonString.isEmpty) {
+        print('📂 No budgets found');
+        return [];
       }
       
-      print('✅ Loaded ${budgets.length} budgets from Hive');
+      final jsonList = jsonDecode(jsonString) as List;
+      final budgets = jsonList.map((json) => Budget(
+        category: json['category'] as String,
+        amount: (json['amount'] as num).toDouble(),
+        period: json['period'] as String,
+      )).toList();
+      
+      print('✅ Loaded ${budgets.length} budgets');
       return budgets;
     } catch (e) {
       print('❌ ERROR loading budgets: $e');
@@ -147,14 +165,12 @@ class StorageService {
   // USERS
   static Future<void> saveUsers(List<User> users) async {
     try {
-      final box = Hive.box<Map>(_usersBox);
-      await box.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = users.map((u) => u.toJson()).toList();
+      final jsonString = jsonEncode(jsonList);
       
-      for (var i = 0; i < users.length; i++) {
-        await box.put(i, users[i].toJson());
-      }
-      
-      print('💾 Saved ${users.length} users to Hive');
+      await prefs.setString(_usersKey, jsonString);
+      print('💾 Saved ${users.length} users');
     } catch (e) {
       print('❌ ERROR saving users: $e');
     }
@@ -162,17 +178,18 @@ class StorageService {
 
   static Future<List<User>> loadUsers() async {
     try {
-      final box = Hive.box<Map>(_usersBox);
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_usersKey);
       
-      final users = <User>[];
-      for (var i = 0; i < box.length; i++) {
-        final data = box.get(i);
-        if (data != null) {
-          users.add(User.fromJson(Map<String, dynamic>.from(data)));
-        }
+      if (jsonString == null || jsonString.isEmpty) {
+        print('📂 No users found');
+        return [];
       }
       
-      print('✅ Loaded ${users.length} users from Hive');
+      final jsonList = jsonDecode(jsonString) as List;
+      final users = jsonList.map((json) => User.fromJson(json)).toList();
+      
+      print('✅ Loaded ${users.length} users');
       return users;
     } catch (e) {
       print('❌ ERROR loading users: $e');
@@ -183,14 +200,12 @@ class StorageService {
   // SHARED EXPENSES
   static Future<void> saveSharedExpenses(List<SharedExpense> expenses) async {
     try {
-      final box = Hive.box<Map>(_sharedExpensesBox);
-      await box.clear();
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = expenses.map((e) => e.toJson()).toList();
+      final jsonString = jsonEncode(jsonList);
       
-      for (var i = 0; i < expenses.length; i++) {
-        await box.put(i, expenses[i].toJson());
-      }
-      
-      print('💾 Saved ${expenses.length} shared expenses to Hive');
+      await prefs.setString(_sharedExpensesKey, jsonString);
+      print('💾 Saved ${expenses.length} shared expenses');
     } catch (e) {
       print('❌ ERROR saving shared expenses: $e');
     }
@@ -198,17 +213,18 @@ class StorageService {
 
   static Future<List<SharedExpense>> loadSharedExpenses() async {
     try {
-      final box = Hive.box<Map>(_sharedExpensesBox);
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString(_sharedExpensesKey);
       
-      final expenses = <SharedExpense>[];
-      for (var i = 0; i < box.length; i++) {
-        final data = box.get(i);
-        if (data != null) {
-          expenses.add(SharedExpense.fromJson(Map<String, dynamic>.from(data)));
-        }
+      if (jsonString == null || jsonString.isEmpty) {
+        print('📂 No shared expenses found');
+        return [];
       }
       
-      print('✅ Loaded ${expenses.length} shared expenses from Hive');
+      final jsonList = jsonDecode(jsonString) as List;
+      final expenses = jsonList.map((json) => SharedExpense.fromJson(json)).toList();
+      
+      print('✅ Loaded ${expenses.length} shared expenses');
       return expenses;
     } catch (e) {
       print('❌ ERROR loading shared expenses: $e');
@@ -216,13 +232,13 @@ class StorageService {
     }
   }
 
-  // Clear all data
   static Future<void> clearAll() async {
-    await Hive.box<Map>(_expensesBox).clear();
-    await Hive.box<Map>(_recurringExpensesBox).clear();
-    await Hive.box<Map>(_budgetsBox).clear();
-    await Hive.box<Map>(_usersBox).clear();
-    await Hive.box<Map>(_sharedExpensesBox).clear();
-    print('🗑️ All Hive storage cleared');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_expensesKey);
+    await prefs.remove(_recurringExpensesKey);
+    await prefs.remove(_budgetsKey);
+    await prefs.remove(_usersKey);
+    await prefs.remove(_sharedExpensesKey);
+    print('🗑️ All storage cleared');
   }
 }

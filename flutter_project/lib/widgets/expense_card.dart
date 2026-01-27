@@ -135,30 +135,36 @@ class ExpenseCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getCategoryColor().withAlpha(50),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            expense.category,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _getCategoryColor(),
-                              fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getCategoryColor().withAlpha(50),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              expense.category,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _getCategoryColor(),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          expense.formattedDate,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        Flexible(
+                          child: Text(
+                            expense.formattedDate,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
